@@ -1,5 +1,6 @@
 require 'js'
 require 'web_component'
+require 'ctrl_group'
 
 # 9x5 viewport into the 9x9 MIDI grid (full width, centre rows: y=2..6).
 # Note number formula: NoteNumber = 36 + (y * 9) + x
@@ -17,6 +18,16 @@ class PadGrid
   OCTAVE_CC     = 23
   OCTAVE_CENTER = 64
 
+  # Lattice palette: centre (x=0,y=0) → white, X-axis (y=0) → dim 2,
+  # off-axis cells → DIMENSION_COLORS[current dim] (3, 4, or 5).
+  DIMENSION_COLORS = {
+    1 => "#ffffff",
+    2 => "#F27A91",
+    3 => "#6EDA87",
+    4 => "#B399EE",
+    5 => "#FFC149"
+  }
+
   PAD_CSS = <<~CSS
     :host {
       display: block;
@@ -33,7 +44,7 @@ class PadGrid
       touch-action: none;
     }
     .pad {
-      background: #2d4a6e;
+      background: #524E61;
       border: none;
       border-radius: 6px;
       cursor: pointer;
@@ -48,9 +59,7 @@ class PadGrid
       font-family: monospace;
       transition: background 0.05s;
     }
-    .pad.root          { background: #1a5c3a; }
-    .pad.active        { background: #4dabf7; color: #fff; font-size: clamp(0.7rem, 2.6vw, 1rem); }
-    .pad.root.active   { background: #69db7c; color: #fff; }
+    .pad.active        { color: #fff; font-size: clamp(0.7rem, 2.6vw, 1rem); }
     .debug-overlay {
       position: fixed;
       bottom: 0;
@@ -168,6 +177,7 @@ class PadGrid
 
       @pointers[id] = { target: target, note: note, x: x, y: y, start_y: touch[:clientY].to_f, offset: 0 }
       target[:classList].call(:add, "active")
+      target[:style][:background] = active_color(x, y)
       target[:textContent] = "±0"
       $midi_sender.note_on(note, velocity)
       $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
@@ -238,6 +248,7 @@ class PadGrid
 
     @pointers[pointer_id] = { target: target, note: note, x: x, y: y, start_y: event[:clientY].to_f, offset: 0 }
     target[:classList].call(:add, "active")
+    target[:style][:background] = active_color(x, y)
     target[:textContent] = "±0"
     $midi_sender.note_on(note, velocity)
     $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
@@ -300,9 +311,18 @@ class PadGrid
 
   def release_pad(state, id)
     state[:target][:classList].call(:remove, "active")
+    state[:target][:style][:background] = ""
     state[:target][:textContent] = state[:note].to_s
     $midi_sender.note_off(state[:note])
     $audio_engine.note_off(id) if defined?($audio_engine) && $audio_engine
+  end
+
+  def active_color(x, y)
+    rel_x = x - CENTER_X
+    rel_y = y - CENTER_Y
+    return DIMENSION_COLORS[1] if rel_x == 0 && rel_y == 0
+    return DIMENSION_COLORS[2] if rel_y == 0
+    DIMENSION_COLORS[DimCtrl.current] || DIMENSION_COLORS[3]
   end
 
   def format_offset(n)
@@ -352,6 +372,7 @@ class PadGrid
     return unless pad
     return if @mirror_active_notes.key?(note)
     pad[:classList].call(:add, "active")
+    pad[:style][:background] = active_color(pad[:dataset][:x].to_i, pad[:dataset][:y].to_i)
     pad[:textContent] = "±0"
     @mirror_active_notes[note] = pad
   end
@@ -361,12 +382,14 @@ class PadGrid
     pad  = @mirror_active_notes.delete(note)
     return unless pad
     pad[:classList].call(:remove, "active")
+    pad[:style][:background] = ""
     pad[:textContent] = note.to_s
   end
 
   def release_all_mirror_notes
     @mirror_active_notes.each do |note, pad|
       pad[:classList].call(:remove, "active")
+      pad[:style][:background] = ""
       pad[:textContent] = note.to_s
     end
     @mirror_active_notes.clear

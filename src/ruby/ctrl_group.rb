@@ -6,6 +6,12 @@ class DimCtrl
 
   CC_DIM = 20
 
+  @@current = 3
+
+  def self.current
+    @@current
+  end
+
   def connected_callback(element)
     doc = JS.global[:document]
     element[:className] = "ctrl-group"
@@ -42,6 +48,7 @@ class DimCtrl
   private
 
   def set_active(v)
+    @@current = v.to_i
     @buttons.each do |val, btn|
       if val == v
         btn[:classList].call(:add, "active")
