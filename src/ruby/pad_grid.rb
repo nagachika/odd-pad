@@ -156,13 +156,16 @@ class PadGrid
 
       id       = touch[:identifier].to_i
       note     = note_val.to_i
+      x        = target[:dataset][:x].to_i
+      y        = target[:dataset][:y].to_i
       velocity = calc_touch_velocity(touch, target)
 
-      @pointers[id] = { target: target, note: note, start_y: touch[:clientY].to_f, offset: 0 }
+      @pointers[id] = { target: target, note: note, x: x, y: y, start_y: touch[:clientY].to_f, offset: 0 }
       target[:classList].call(:add, "active")
       target[:textContent] = "±0"
       $midi_sender.note_on(note, velocity)
       $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
+      $audio_engine.note_on(id, x, y, velocity, 0) if defined?($audio_engine) && $audio_engine
       log_debug("touchstart", id, note)
     end
   end
@@ -181,6 +184,7 @@ class PadGrid
       state[:offset] = new_offset
       state[:target][:textContent] = format_offset(new_offset)
       $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER + new_offset)
+      $audio_engine.set_octave_offset(id, new_offset) if defined?($audio_engine) && $audio_engine
     end
   end
 
@@ -189,7 +193,7 @@ class PadGrid
       id    = touch[:identifier].to_i
       state = @pointers.delete(id)
       next unless state
-      release_pad(state)
+      release_pad(state, id)
       log_debug("touchend", id, state[:note])
     end
   end
@@ -200,7 +204,7 @@ class PadGrid
       log_debug("touchcancel-raw", id)
       state = @pointers.delete(id)
       next unless state
-      release_pad(state)
+      release_pad(state, id)
       log_debug("touchcancel", id, state[:note])
     end
   end
@@ -218,13 +222,16 @@ class PadGrid
     @grid.call(:setPointerCapture, event[:pointerId])
 
     note     = note_val.to_i
+    x        = target[:dataset][:x].to_i
+    y        = target[:dataset][:y].to_i
     velocity = calc_velocity(event, target)
 
-    @pointers[pointer_id] = { target: target, note: note, start_y: event[:clientY].to_f, offset: 0 }
+    @pointers[pointer_id] = { target: target, note: note, x: x, y: y, start_y: event[:clientY].to_f, offset: 0 }
     target[:classList].call(:add, "active")
     target[:textContent] = "±0"
     $midi_sender.note_on(note, velocity)
     $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
+    $audio_engine.note_on(pointer_id, x, y, velocity, 0) if defined?($audio_engine) && $audio_engine
     log_debug("mousedown", pointer_id, note)
   end
 
@@ -241,6 +248,7 @@ class PadGrid
     state[:offset] = new_offset
     state[:target][:textContent] = format_offset(new_offset)
     $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER + new_offset)
+    $audio_engine.set_octave_offset(pointer_id, new_offset) if defined?($audio_engine) && $audio_engine
   end
 
   def on_pointerup(event)
@@ -248,7 +256,7 @@ class PadGrid
     pointer_id = event[:pointerId].to_i
     state      = @pointers.delete(pointer_id)
     return unless state
-    release_pad(state)
+    release_pad(state, pointer_id)
     log_debug("mouseup", pointer_id, state[:note])
   end
 
@@ -268,7 +276,7 @@ class PadGrid
     log_debug("#{label}-raw(mouse)", pointer_id)
     state = @pointers.delete(pointer_id)
     return unless state
-    release_pad(state)
+    release_pad(state, pointer_id)
     log_debug("#{label}(mouse)", pointer_id, state[:note])
   end
 
@@ -277,10 +285,11 @@ class PadGrid
     changed[:length].to_i.times { |i| yield changed.call(:item, i) }
   end
 
-  def release_pad(state)
+  def release_pad(state, id)
     state[:target][:classList].call(:remove, "active")
     state[:target][:textContent] = state[:note].to_s
     $midi_sender.note_off(state[:note])
+    $audio_engine.note_off(id) if defined?($audio_engine) && $audio_engine
   end
 
   def format_offset(n)

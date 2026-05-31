@@ -26,6 +26,7 @@ class DimCtrl
         })
         e[:currentTarget][:classList].call(:add, "active")
         $midi_sender.send_cc(20, v)
+        $audio_engine.set_dim(v) if defined?($audio_engine) && $audio_engine
       })
       btn_group.call(:appendChild, btn)
     end
@@ -56,11 +57,16 @@ class VolCtrl
     input[:value] = "100"
     input[:step] = "1"
     input.call(:addEventListener, "input", proc { |e|
-      $midi_sender.send_cc(7, e[:target][:value].to_i)
+      v = e[:target][:value].to_i
+      $midi_sender.send_cc(7, v)
+      $audio_engine.set_volume(v) if defined?($audio_engine) && $audio_engine
     })
 
     element.call(:appendChild, label)
     element.call(:appendChild, input)
+
+    # Sync initial slider value to audio engine
+    $audio_engine.set_volume(input[:value].to_i) if defined?($audio_engine) && $audio_engine
   end
 
   VolCtrl.register("vol-ctrl")

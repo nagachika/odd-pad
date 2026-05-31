@@ -69,6 +69,10 @@ window.App = {
   vm:         null,
   midiOutput: null,
   _useBridge: false,
+  audioCtx:   null,
+  defaultPatchJson: "",
+
+  loadDefaultPatch() { return this.defaultPatchJson; },
 
   eval(code, ctx = "Main") {
     try {
@@ -157,6 +161,13 @@ async function writeRubyFiles() {
   const files = [
     "src/ruby/web_component.rb",
     "src/ruby/midi_sender.rb",
+    "src/ruby/synthesizer/audio_node_wrapper.rb",
+    "src/ruby/synthesizer/adsr_envelope.rb",
+    "src/ruby/synthesizer/nodes.rb",
+    "src/ruby/synthesizer/voice.rb",
+    "src/ruby/synthesizer.rb",
+    "src/ruby/audio_engine.rb",
+    "src/ruby/audio_out_ctrl.rb",
     "src/ruby/pad_grid.rb",
     "src/ruby/main.rb",
     "src/ruby/ctrl_group.rb",
@@ -203,6 +214,29 @@ async function writeRubyFiles() {
   App.eval("$LOAD_PATH.unshift '/src/ruby'");
 }
 
+// ── Default Patch JSON ───────────────────────────────────────────────────────
+
+async function loadDefaultPatchJson() {
+  const bust = Date.now();
+  try {
+    const res = await fetch(`patches/default.json?_=${bust}`);
+    if (!res.ok) { console.warn("[Patch] default.json fetch failed:", res.status); return; }
+    App.defaultPatchJson = await res.text();
+  } catch (e) {
+    console.warn("[Patch] default.json fetch error:", e);
+  }
+}
+
+// ── Audio Setup ──────────────────────────────────────────────────────────────
+
+function setupAudio() {
+  if (App.audioCtx) return;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) { console.warn("[Audio] AudioContext unsupported"); return; }
+  App.audioCtx = new Ctor();
+  window.audioCtx = App.audioCtx; // Synthesizer#create_noise_buffer expects this
+}
+
 // ── MIDI Setup ────────────────────────────────────────────────────────────────
 
 async function setupMIDI() {
@@ -241,13 +275,15 @@ startBtn.addEventListener("click", async () => {
   startBtn.textContent = "Initializing…";
 
   await setupMIDI();
-  await writeRubyFiles();
+  setupAudio();
+  await Promise.all([writeRubyFiles(), loadDefaultPatchJson()]);
 
   App.eval("require 'main'");
 
   const headerEl = document.querySelector("header");
   headerEl.appendChild(document.createElement("dim-ctrl"));
   headerEl.appendChild(document.createElement("vol-ctrl"));
+  headerEl.appendChild(document.createElement("audio-out-ctrl"));
   headerEl.appendChild(document.createElement("midi-out-ctrl"));
   headerEl.appendChild(document.createElement("kebab-menu"));
 

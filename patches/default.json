@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    { "id": "vco", "type": "Oscillator", "freq_track": true, "params": { "type": "sawtooth" } },
+    { "id": "vcf", "type": "BiquadFilter", "params": { "type": "lowpass", "frequency": 2000.0, "q": 5.0 } },
+    { "id": "vca", "type": "Gain", "params": { "gain": 0.0 } },
+    { "id": "env", "type": "ADSR", "params": { "attack": 0.1, "decay": 0.2, "sustain": 0.5, "release": 0.5 } },
+    { "id": "lfo", "type": "Oscillator", "params": { "type": "sine", "frequency": 5.0 } },
+    { "id": "lfo_gain", "type": "Gain", "params": { "gain": 500.0 } }
+  ],
+  "connections": [
+    { "from": "vco", "to": "vcf" },
+    { "from": "vcf", "to": "vca" },
+    { "from": "vca", "to": "out" },
+    { "from": "env", "to": "vca.gain" },
+    { "from": "lfo", "to": "lfo_gain" },
+    { "from": "lfo_gain", "to": "vcf.frequency" }
+  ]
+}
