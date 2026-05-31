@@ -2,6 +2,7 @@ require 'js'
 require 'set'
 require 'web_component'
 require 'midi_sender'
+require 'mirror_receiver'
 require 'audio_engine'
 require 'ctrl_group'   # registers <dim-ctrl> and <vol-ctrl>
 require 'kebab_menu'   # registers <kebab-menu>
@@ -15,5 +16,8 @@ $midi_sender = MidiSender.new
 # Global Audio engine — local synthesis, parallel to MIDI output
 $ctx = JS.eval("return window.App.audioCtx;")
 $audio_engine = AudioEngine.new($ctx)
+
+# Global Mirror receiver — passive demo mode that reflects an external tablet
+$mirror_receiver = MirrorReceiver.new
 
 puts "[main] Ruby boot complete. <pad-grid> registered."

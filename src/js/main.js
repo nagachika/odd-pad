@@ -101,6 +101,14 @@ window.App = {
     localStorage.setItem(BRIDGE_HOST_KEY, hostPort);
     connectBridge(hostPortToWss(hostPort));
   },
+
+  dispatchEvent(name, detail) {
+    document.dispatchEvent(new CustomEvent(name, { detail }));
+  },
+
+  hasMidiAccess() {
+    return this.midiAccess != null;
+  },
 };
 
 // ── UI Elements ───────────────────────────────────────────────────────────────
@@ -169,6 +177,7 @@ async function writeRubyFiles() {
     "src/ruby/audio_engine.rb",
     "src/ruby/audio_out_ctrl.rb",
     "src/ruby/pad_grid.rb",
+    "src/ruby/mirror_receiver.rb",
     "src/ruby/main.rb",
     "src/ruby/ctrl_group.rb",
     "src/ruby/kebab_menu.rb",
@@ -285,6 +294,25 @@ startBtn.addEventListener("click", async () => {
   headerEl.appendChild(document.createElement("vol-ctrl"));
   headerEl.appendChild(document.createElement("audio-out-ctrl"));
   headerEl.appendChild(document.createElement("midi-out-ctrl"));
+
+  const mirrorBadge = document.createElement("span");
+  mirrorBadge.id = "mirror-badge";
+  mirrorBadge.className = "mirror-badge";
+  mirrorBadge.hidden = true;
+  mirrorBadge.textContent = "MIRROR";
+  headerEl.appendChild(mirrorBadge);
+
+  document.addEventListener("mirror-mode-change", e => {
+    const d = e.detail || {};
+    if (d.active) {
+      mirrorBadge.hidden = false;
+      mirrorBadge.textContent = d.connected ? "MIRROR" : "MIRROR (disconnected)";
+    } else {
+      mirrorBadge.hidden = true;
+      mirrorBadge.textContent = "MIRROR";
+    }
+  });
+
   headerEl.appendChild(document.createElement("kebab-menu"));
 
   const padGrid = document.createElement("pad-grid");

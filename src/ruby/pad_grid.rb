@@ -74,10 +74,14 @@ class PadGrid
     @element = js_element
     @shadow  = @element.call(:attachShadow, JS.eval("return { mode: 'open' }"))
     @pointers = {}
+    @pad_by_note = {}
+    @mirror_active_notes = {}
+    @mirror_active = false
     @debug = JS.global[:location][:search].to_s.include?("debug=1")
     inject_style
     render_grid
     attach_events
+    attach_mirror_listeners
     setup_debug_overlay if @debug
   end
 
@@ -110,6 +114,7 @@ class PadGrid
         btn[:dataset][:y]     = y
         btn[:textContent]     = note.to_s
         @grid.call(:appendChild, btn)
+        @pad_by_note[note] = btn
       end
     end
 
@@ -149,6 +154,7 @@ class PadGrid
 
   def on_touchstart(event)
     event.call(:preventDefault)
+    return if @mirror_active
     each_changed_touch(event) do |touch|
       target   = touch[:target]
       note_val = target[:dataset][:note]
@@ -172,6 +178,7 @@ class PadGrid
 
   def on_touchmove(event)
     event.call(:preventDefault)
+    return if @mirror_active
     each_changed_touch(event) do |touch|
       id    = touch[:identifier].to_i
       state = @pointers[id]
@@ -189,6 +196,7 @@ class PadGrid
   end
 
   def on_touchend(event)
+    return if @mirror_active
     each_changed_touch(event) do |touch|
       id    = touch[:identifier].to_i
       state = @pointers.delete(id)
@@ -199,6 +207,7 @@ class PadGrid
   end
 
   def on_touchcancel(event)
+    return if @mirror_active
     each_changed_touch(event) do |touch|
       id = touch[:identifier].to_i
       log_debug("touchcancel-raw", id)
@@ -212,6 +221,7 @@ class PadGrid
   # ── Pointer Event handlers (mouse only) ───────────────────────────────────
 
   def on_pointerdown(event)
+    return if @mirror_active
     return unless event[:pointerType].to_s == "mouse"
     target   = event[:target]
     note_val = target[:dataset][:note]
@@ -236,6 +246,7 @@ class PadGrid
   end
 
   def on_pointermove(event)
+    return if @mirror_active
     return unless event[:pointerType].to_s == "mouse"
     pointer_id = event[:pointerId].to_i
     state      = @pointers[pointer_id]
@@ -252,6 +263,7 @@ class PadGrid
   end
 
   def on_pointerup(event)
+    return if @mirror_active
     return unless event[:pointerType].to_s == "mouse"
     pointer_id = event[:pointerId].to_i
     state      = @pointers.delete(pointer_id)
@@ -271,6 +283,7 @@ class PadGrid
   # ── Shared helpers ─────────────────────────────────────────────────────────
 
   def cleanup_mouse_pointer(event, label)
+    return if @mirror_active
     return unless event[:pointerType].to_s == "mouse"
     pointer_id = event[:pointerId].to_i
     log_debug("#{label}-raw(mouse)", pointer_id)
@@ -316,6 +329,47 @@ class PadGrid
       rel_y = 1.0 - (event[:clientY].to_f - rect[:top].to_f) / rect[:height].to_f
       (rel_y * 100 + 27).round.clamp(1, 127)
     end
+  end
+
+  # ── Mirror mode event handlers ────────────────────────────────────────────
+
+  def attach_mirror_listeners
+    doc = JS.global[:document]
+    doc.call(:addEventListener, "mirror-mode-change", method(:on_mirror_mode_change).to_proc)
+    doc.call(:addEventListener, "mirror-note-on",     method(:on_mirror_note_on).to_proc)
+    doc.call(:addEventListener, "mirror-note-off",    method(:on_mirror_note_off).to_proc)
+  end
+
+  def on_mirror_mode_change(event)
+    @mirror_active = event[:detail][:active].to_s == "true"
+    release_all_mirror_notes unless @mirror_active
+  end
+
+  def on_mirror_note_on(event)
+    return unless @mirror_active
+    note = event[:detail][:note].to_i
+    pad  = @pad_by_note[note]
+    return unless pad
+    return if @mirror_active_notes.key?(note)
+    pad[:classList].call(:add, "active")
+    pad[:textContent] = "±0"
+    @mirror_active_notes[note] = pad
+  end
+
+  def on_mirror_note_off(event)
+    note = event[:detail][:note].to_i
+    pad  = @mirror_active_notes.delete(note)
+    return unless pad
+    pad[:classList].call(:remove, "active")
+    pad[:textContent] = note.to_s
+  end
+
+  def release_all_mirror_notes
+    @mirror_active_notes.each do |note, pad|
+      pad[:classList].call(:remove, "active")
+      pad[:textContent] = note.to_s
+    end
+    @mirror_active_notes.clear
   end
 
   # ── Debug overlay (enabled with ?debug=1) ─────────────────────────────────

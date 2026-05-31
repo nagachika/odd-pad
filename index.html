@@ -109,6 +109,22 @@
     #midi-out-select { max-width: 140px; }
     #midi-out-status { font-size: 0.75rem; color: #666; }
 
+    select:disabled, input[type="range"]:disabled, .dim-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .mirror-badge {
+      background: #5c1a1a;
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.08em;
+    }
+    .mirror-badge[hidden] { display: none; }
+
     /* ── Grid Container ───────────────────────────────── */
     #grid-container {
       flex: 1;

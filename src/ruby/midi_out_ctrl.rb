@@ -11,7 +11,11 @@ class MidiOutCtrl
     element[:id] = "midi-out-group"
     element[:className] = "ctrl-group"
 
+    @mirror_active   = false
+    @saved_selection = nil
+
     build_dom
+    listen_mirror_changes
     setup_outputs
     listen_bridge_changes
   end
@@ -125,6 +129,27 @@ class MidiOutCtrl
         connected = JS.global[:App].call(:bridgeIsConnected).to_s == "true"
         @status[:textContent] = connected ? "connected" : "disconnected"
       end
+    })
+  end
+
+  def listen_mirror_changes
+    JS.global[:document].call(:addEventListener, "mirror-mode-change", proc { |event|
+      active = event[:detail][:active].to_s == "true"
+      if active && !@mirror_active
+        @saved_selection = @select[:value].to_s
+        @select[:value]  = ""
+        update_output
+        @select[:disabled] = true
+        @status[:textContent] = "locked (mirror)"
+      elsif !active && @mirror_active
+        @select[:disabled] = false
+        if @saved_selection && !@saved_selection.empty?
+          @select[:value] = @saved_selection
+        end
+        @saved_selection = nil
+        update_output
+      end
+      @mirror_active = active
     })
   end
 
