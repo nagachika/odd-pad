@@ -173,6 +173,7 @@ async function writeRubyFiles() {
     "src/ruby/synthesizer/adsr_envelope.rb",
     "src/ruby/synthesizer/nodes.rb",
     "src/ruby/synthesizer/voice.rb",
+    "src/ruby/synthesizer/voice_pool.rb",
     "src/ruby/synthesizer.rb",
     "src/ruby/audio_engine.rb",
     "src/ruby/audio_out_ctrl.rb",
