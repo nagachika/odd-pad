@@ -8,13 +8,16 @@ class AudioEngine
   CENTER_Y  = 4
 
   attr_reader :enabled, :dim
+  # While the sequencer is record-armed, pads monitor through the armed
+  # track's synth instead of the pad's own synth.
+  attr_accessor :monitor_synth
 
   def initialize(ctx)
     @ctx = ctx
     @enabled = false
     @dim = 3
-    @voices = {}  # pointer_id => { voice:, freq:, octave: }
-    @freq_track_ids = []
+    @voices = {}  # pointer_id => { voice:, freq:, octave:, synth: }
+    @monitor_synth = nil
 
     if ctx.nil? || ctx.typeof == "undefined"
       puts "[AudioEngine] No AudioContext available; local audio disabled."
@@ -31,8 +34,6 @@ class AudioEngine
         puts "[AudioEngine] Failed to import default patch: #{e.message}"
       end
     end
-
-    @freq_track_ids = collect_freq_track_ids
   end
 
   def set_enabled(on)
@@ -78,20 +79,21 @@ class AudioEngine
 
   def note_on(pointer_id, x, y, velocity_127, octave_offset)
     return unless @enabled && @synth
+    synth = @monitor_synth || @synth
     freq = freq_for(x, y, octave_offset, @dim)
     v = (velocity_127.to_i.clamp(1, 127)) / 127.0
-    @synth.note_on(freq, velocity: v)
-    voice = @synth.voice_for(freq)
+    synth.note_on(freq, velocity: v)
+    voice = synth.voice_for(freq)
     # A pooled voice keeps the detune the previous note's octave shift left
     # behind, so start every note from zero cents.
-    apply_detune(voice, 0) if voice
-    @voices[pointer_id] = { voice: voice, freq: freq, octave: octave_offset.to_i }
+    apply_detune(synth, voice, 0) if voice
+    @voices[pointer_id] = { voice: voice, freq: freq, octave: octave_offset.to_i, synth: synth }
   end
 
   def note_off(pointer_id)
     state = @voices.delete(pointer_id)
-    return unless state && @synth
-    @synth.note_off(state[:freq])
+    return unless state
+    state[:synth].note_off(state[:freq])
   end
 
   def set_octave_offset(pointer_id, offset)
@@ -102,20 +104,23 @@ class AudioEngine
     state[:octave] = new_offset
     voice = state[:voice]
     return unless voice
-    apply_detune(voice, new_offset * 1200)
+    apply_detune(state[:synth], voice, new_offset * 1200)
   end
 
   private
 
-  def collect_freq_track_ids
-    patch = @synth.custom_patch
+  # freq_track node ids depend on the synth's patch, and the monitor synth
+  # can carry any imported patch — resolve them per call.
+  def freq_track_ids(synth)
+    patch = synth.custom_patch
     return [] unless patch && patch[:nodes]
     patch[:nodes].select { |n| n[:freq_track] }.map { |n| n[:id].to_s }
   end
 
-  def apply_detune(voice, cents)
+  def apply_detune(synth, voice, cents)
+    ids = freq_track_ids(synth)
     voice.nodes.each do |id, node|
-      next unless @freq_track_ids.include?(id.to_s)
+      next unless ids.include?(id.to_s)
       next unless node.is_a?(OscillatorNode)
       node.detune.value = cents
     end
@@ -126,5 +131,6 @@ class AudioEngine
   def stop_all_held
     @voices.clear
     @synth.stop_all_immediately
+    @monitor_synth&.stop_all_immediately
   end
 end

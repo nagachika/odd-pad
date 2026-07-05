@@ -177,6 +177,8 @@ async function writeRubyFiles() {
     "src/ruby/synthesizer.rb",
     "src/ruby/audio_engine.rb",
     "src/ruby/audio_out_ctrl.rb",
+    "src/ruby/step_sequencer.rb",
+    "src/ruby/seq_panel.rb",
     "src/ruby/pad_grid.rb",
     "src/ruby/mirror_receiver.rb",
     "src/ruby/main.rb",
@@ -316,8 +318,11 @@ startBtn.addEventListener("click", async () => {
 
   headerEl.appendChild(document.createElement("kebab-menu"));
 
+  const gridContainer = document.getElementById("grid-container");
+  document.body.insertBefore(document.createElement("seq-panel"), gridContainer);
+
   const padGrid = document.createElement("pad-grid");
-  document.getElementById("grid-container").appendChild(padGrid);
+  gridContainer.appendChild(padGrid);
   document.addEventListener("contextmenu", e => e.preventDefault());
   overlay.style.display = "none";
 

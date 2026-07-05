@@ -182,6 +182,7 @@ class PadGrid
       $midi_sender.note_on(note, velocity)
       $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
       $audio_engine.note_on(id, x, y, velocity, 0) if defined?($audio_engine) && $audio_engine
+      $step_sequencer.capture_note_on(id, x, y, velocity, 0) if defined?($step_sequencer) && $step_sequencer
       log_debug("touchstart", id, note)
     end
   end
@@ -253,6 +254,7 @@ class PadGrid
     $midi_sender.note_on(note, velocity)
     $midi_sender.send_cc(OCTAVE_CC, OCTAVE_CENTER) if @pointers.size == 1
     $audio_engine.note_on(pointer_id, x, y, velocity, 0) if defined?($audio_engine) && $audio_engine
+    $step_sequencer.capture_note_on(pointer_id, x, y, velocity, 0) if defined?($step_sequencer) && $step_sequencer
     log_debug("mousedown", pointer_id, note)
   end
 
@@ -315,6 +317,7 @@ class PadGrid
     state[:target][:textContent] = state[:note].to_s
     $midi_sender.note_off(state[:note])
     $audio_engine.note_off(id) if defined?($audio_engine) && $audio_engine
+    $step_sequencer.capture_note_off(id) if defined?($step_sequencer) && $step_sequencer
   end
 
   def active_color(x, y)
