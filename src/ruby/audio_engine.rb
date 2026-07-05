@@ -82,6 +82,9 @@ class AudioEngine
     v = (velocity_127.to_i.clamp(1, 127)) / 127.0
     @synth.note_on(freq, velocity: v)
     voice = @synth.voice_for(freq)
+    # A pooled voice keeps the detune the previous note's octave shift left
+    # behind, so start every note from zero cents.
+    apply_detune(voice, 0) if voice
     @voices[pointer_id] = { voice: voice, freq: freq, octave: octave_offset.to_i }
   end
 
@@ -97,14 +100,9 @@ class AudioEngine
     new_offset = offset.to_i
     return if new_offset == state[:octave]
     state[:octave] = new_offset
-    cents = new_offset * 1200
     voice = state[:voice]
     return unless voice
-    voice.nodes.each do |id, node|
-      next unless @freq_track_ids.include?(id.to_s)
-      next unless node.is_a?(OscillatorNode)
-      node.detune.value = cents
-    end
+    apply_detune(voice, new_offset * 1200)
   end
 
   private
@@ -115,15 +113,18 @@ class AudioEngine
     patch[:nodes].select { |n| n[:freq_track] }.map { |n| n[:id].to_s }
   end
 
-  def stop_all_held
-    @voices.each_value do |s|
-      begin
-        s[:voice]&.stop_immediately
-      rescue => e
-        puts "[AudioEngine] stop_immediately warning: #{e.message}"
-      end
+  def apply_detune(voice, cents)
+    voice.nodes.each do |id, node|
+      next unless @freq_track_ids.include?(id.to_s)
+      next unless node.is_a?(OscillatorNode)
+      node.detune.value = cents
     end
+  end
+
+  # Stopping voices directly would permanently kill pooled voices' source
+  # nodes; the synth knows which voices are pooled and quiesces those.
+  def stop_all_held
     @voices.clear
-    @synth.stop_all_immediately if @synth.respond_to?(:stop_all_immediately)
+    @synth.stop_all_immediately
   end
 end

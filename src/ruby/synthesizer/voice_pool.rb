@@ -54,6 +54,50 @@ class VoicePool
     entry
   end
 
+  # --- odd-pad extension (not in upstream purified-synth) -------------------
+  # Interactive note_on/note_off path: the hold duration is unknown at
+  # trigger time, so a held entry is marked busy indefinitely and can never
+  # be stolen until note_off marks its release.
+
+  # Starts a held note on a pooled voice. Returns the entry, or nil when the
+  # patch is not poolable or every voice is still holding a note (caller
+  # falls back to a dynamic Voice).
+  def note_on(freq, velocity)
+    return nil unless @poolable
+
+    now = @ctx[:currentTime].to_f
+    entry = acquire(now)
+    return nil unless entry
+
+    voice = entry[:voice]
+    voice.retune(freq, now)
+    voice.trigger_at(now, velocity)
+    entry[:hold_until] = Float::INFINITY
+    entry[:busy_until] = Float::INFINITY
+    entry
+  end
+
+  def note_off(entry)
+    now = @ctx[:currentTime].to_f
+    voice = entry[:voice]
+    voice.release_at(now)
+    entry[:hold_until] = now
+    entry[:busy_until] = now + voice.max_release + SETTLE_SLACK
+  end
+
+  # Immediate silence for every entry (audio-output-off toggle). Pooled
+  # sources must keep running, so gate the envelopes to zero instead of
+  # stopping nodes, and mark all entries free for reuse.
+  def quiesce_all
+    @entries.each do |e|
+      e[:voice].quiesce
+      e[:hold_until] = 0.0
+      e[:busy_until] = 0.0
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+
   def size
     @entries.length
   end

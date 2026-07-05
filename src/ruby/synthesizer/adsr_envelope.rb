@@ -15,8 +15,14 @@ class ADSREnvelope
 
   # Force the gated param to 0 immediately (idle state for pooled voices,
   # whose sources keep running while the voice is silent).
+  # In-flight automation must be cancelled first: assigning value while
+  # ramp events are still scheduled acts as setValueAtTime(0, now), and the
+  # pending attack/decay ramps then bring the envelope right back up.
   def quiesce
-    @target_param&.value = 0.0
+    return unless @target_param
+
+    @target_param.cancel_scheduled_values(0.0)
+    @target_param.value = 0.0
   end
 
   # Pooled voices may be retriggered (or stolen) while their previous release

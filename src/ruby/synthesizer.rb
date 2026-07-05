@@ -67,9 +67,11 @@ class Synthesizer
     @custom_patch = patch
     # Pooled voices hold nodes and connections built from the old patch
     # (including wiring into shared effects) — tear them down; the pool is
-    # rebuilt lazily on the next scheduled note.
+    # rebuilt lazily on the next scheduled note. Held pooled entries in
+    # @active_voices point at the disposed voices, so drop them too.
     @voice_pool&.dispose_all
     @voice_pool = nil
+    @active_voices&.reject! { |_, v| !v.is_a?(Voice) }
     rebuild_shared_effects
   end
 
@@ -115,9 +117,10 @@ class Synthesizer
   def close
     @final_node&.disconnect
     disconnect_shared_effects
+    # dispose_all already stops pooled voices; only dynamic ones remain.
     @voice_pool&.dispose_all
     @voice_pool = nil
-    @active_voices.values.each(&:stop_immediately)
+    @active_voices.values.each { |v| v.stop_immediately if v.is_a?(Voice) }
     @active_voices.clear
   end
 
@@ -278,6 +281,9 @@ class Synthesizer
     @master_gain.gain.value = val.to_f * 0.5
   end
 
+  # @active_voices values are either a dynamic Voice or a pooled entry (the
+  # VoicePool entry Hash); pooled voices must never be stopped directly, so
+  # every consumer below branches on is_a?(Voice).
   def note_on(freq, velocity: 0.8)
     return if @ctx.typeof == "undefined"
 
@@ -285,9 +291,21 @@ class Synthesizer
       @ctx.call(:resume)
     end
 
-    # Stop existing voice for this frequency if any
-    if @active_voices[freq]
-      @active_voices[freq].stop_immediately
+    # Retrigger on the same frequency: a pooled voice is released back to
+    # the pool (the acquire below may reuse it; ADSREnvelope's retrigger
+    # fade keeps that click-free), a dynamic one is torn down as before.
+    if (existing = @active_voices.delete(freq))
+      if existing.is_a?(Voice)
+        existing.stop_immediately
+      else
+        @voice_pool.note_off(existing)
+      end
+    end
+
+    @voice_pool ||= VoicePool.new(@ctx, self)
+    if (entry = @voice_pool.note_on(freq, velocity))
+      @active_voices[freq] = entry
+      return
     end
 
     voice = Voice.new(@ctx, freq, @custom_patch, self)
@@ -296,20 +314,25 @@ class Synthesizer
   end
 
   def note_off(freq)
-    voice = @active_voices[freq]
-    if voice
-      voice.stop(@ctx[:currentTime].to_f)
-      @active_voices.delete(freq)
+    active = @active_voices.delete(freq)
+    return unless active
+
+    if active.is_a?(Voice)
+      active.stop(@ctx[:currentTime].to_f)
+    else
+      @voice_pool.note_off(active)
     end
   end
 
   def voice_for(freq)
-    @active_voices[freq]
+    active = @active_voices[freq]
+    active.is_a?(Voice) ? active : active&.[](:voice)
   end
 
   def stop_all_immediately
-    @active_voices.values.each(&:stop_immediately)
+    @active_voices.values.each { |v| v.stop_immediately if v.is_a?(Voice) }
     @active_voices.clear
+    @voice_pool&.quiesce_all
   end
 
   def schedule_note(freq, start_time, duration, velocity: 0.8)
